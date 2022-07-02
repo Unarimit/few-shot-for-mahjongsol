@@ -2,7 +2,7 @@ import torch
 from torch.optim import Optimizer
 from torch.nn import Module
 from typing import Callable
-
+import config
 from few_shot.utils import pairwise_distances
 
 

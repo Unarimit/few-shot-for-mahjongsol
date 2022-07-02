@@ -1,3 +1,12 @@
+# Few-shot for mahjong sol
+
+1. 主要添加了数据集并改动了相关代码
+
+2. 对目标数据集应用了合理的图像增强
+
+
+---------- 以下为fork前Readme -----------
+
 # Few-shot learning
 
 The aim for this repository is to contain clean, readable and tested

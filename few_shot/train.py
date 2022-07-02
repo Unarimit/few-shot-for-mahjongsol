@@ -9,6 +9,7 @@ from torch.utils.data import DataLoader
 from typing import Callable, List, Union
 
 from few_shot.callbacks import DefaultCallback, ProgressBarLogger, CallbackList, Callback
+from few_shot.core import NShotTaskSampler
 from few_shot.metrics import NAMED_METRICS
 
 
@@ -99,8 +100,17 @@ def fit(model: Module, optimiser: Optimizer, loss_fn: Callable, epochs: int, dat
 
     callbacks.on_train_begin()
 
+    fix_data_training = 0
     for epoch in range(1, epochs+1):
         callbacks.on_epoch_begin(epoch)
+
+        bs = dataloader.batch_sampler
+        bs.__class__ = NShotTaskSampler
+        if bs.fix_test_len() >= 15 and fix_data_training == 0:  # k = 15
+            li = bs.apply_fix_task()
+            fix_data_training = 1
+            print('enable fixed data training')
+            print('top k difficult task is ' + str(li))
 
         epoch_logs = {}
         for batch_index, batch in enumerate(dataloader):
@@ -108,18 +118,28 @@ def fit(model: Module, optimiser: Optimizer, loss_fn: Callable, epochs: int, dat
 
             callbacks.on_batch_begin(batch_index, batch_logs)
 
-            x, y = prepare_batch(batch)
+            x, y = prepare_batch(batch)  # y is a k * (q+n) tensor
 
             loss, y_pred = fit_function(model, optimiser, loss_fn, x, y, **fit_function_kwargs)
+
             batch_logs['loss'] = loss.item()
+            if epoch > 0 and fix_data_training == 0:  # 为了交替训练，只有不进行fix train的时候更新难任务表
+                y_pred_i_id = y_pred.argmax(1)
+                for i in range(len(y)):
+                    if y[i] != y_pred_i_id[i]:
+                        bs.add_fix_task(int(batch[1][y[i]]))
+                        bs.add_fix_task(int(batch[1][y_pred_i_id[i]]))
 
             # Loops through all metrics
             batch_logs = batch_metrics(model, y_pred, y, metrics, batch_logs)
 
             callbacks.on_batch_end(batch_index, batch_logs)
-
         # Run on epoch end
         callbacks.on_epoch_end(epoch, epoch_logs)
+        if fix_data_training > 0:
+            fix_data_training -= 1
+            if fix_data_training == 0:
+                bs.clear_fix_task()
 
     # Run on train end
     if verbose:

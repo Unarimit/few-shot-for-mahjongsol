@@ -256,6 +256,12 @@ class CSVLogger(Callback):
 
         row_dict = OrderedDict({'epoch': epoch})
         row_dict.update((key, handle_value(logs[key])) for key in self.keys)
+        for key in self.keys:
+            print(key, end='\t')
+        print()
+        for key in self.keys:
+            print((logs[key]), end='\t')
+        print()
         self.writer.writerow(row_dict)
         self.csv_file.flush()
 

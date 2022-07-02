@@ -8,6 +8,7 @@ import pandas as pd
 import numpy as np
 import os
 
+import config
 from config import DATA_PATH
 
 
@@ -69,6 +70,9 @@ class OmniglotDataset(Dataset):
         print('Indexing {}...'.format(subset))
         # Quick first pass to find total for tqdm bar
         subset_len = 0
+        if not os.path.exists(DATA_PATH + '/Omniglot/images_{}/'.format(subset)):
+            print('bug path ' + DATA_PATH + '/Omniglot/images_{}/'.format(subset))
+            exit(0)
         for root, folders, files in os.walk(DATA_PATH + '/Omniglot/images_{}/'.format(subset)):
             subset_len += len([f for f in files if f.endswith('.png')])
 
@@ -94,7 +98,8 @@ class OmniglotDataset(Dataset):
 
 
 class MiniImageNet(Dataset):
-    def __init__(self, subset):
+    def __init__(self, subset, name='MiniImageNet'):
+        self.name = name
         """Dataset class representing miniImageNet dataset
 
         # Arguments:
@@ -120,16 +125,21 @@ class MiniImageNet(Dataset):
 
         # Setup transforms
         self.transform = transforms.Compose([
-            transforms.CenterCrop(224),
-            transforms.Resize(84),
+            # transforms.CenterCrop(224),
+            transforms.RandomChoice([
+                transforms.RandomRotation(degrees=(87.5, 92.5)),
+                transforms.RandomRotation(degrees=(-2.5, 2.5)),
+                transforms.RandomRotation(degrees=(-92.5, -87.5)),
+                transforms.RandomRotation(degrees=(-182.5, -177.5)),
+            ]),
+            transforms.Resize((40, 40)),
             transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                 std=[0.229, 0.224, 0.225])
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         ])
 
     def __getitem__(self, item):
-        instance = Image.open(self.datasetid_to_filepath[item])
-        instance = self.transform(instance)
+        instance = Image.open(self.datasetid_to_filepath[item]).convert('RGB')
+        instance = self.transform(instance).to(config.DEVICE)
         label = self.datasetid_to_class_id[item]
         return instance, label
 
@@ -139,8 +149,7 @@ class MiniImageNet(Dataset):
     def num_classes(self):
         return len(self.df['class_name'].unique())
 
-    @staticmethod
-    def index_subset(subset):
+    def index_subset(self, subset):
         """Index a subset by looping through all of its files and recording relevant information.
 
         # Arguments
@@ -154,11 +163,11 @@ class MiniImageNet(Dataset):
         print('Indexing {}...'.format(subset))
         # Quick first pass to find total for tqdm bar
         subset_len = 0
-        for root, folders, files in os.walk(DATA_PATH + '/miniImageNet/images_{}/'.format(subset)):
+        for root, folders, files in os.walk(DATA_PATH + '/' + self.name + '/images_{}/'.format(subset)):
             subset_len += len([f for f in files if f.endswith('.png')])
 
         progress_bar = tqdm(total=subset_len)
-        for root, folders, files in os.walk(DATA_PATH + '/miniImageNet/images_{}/'.format(subset)):
+        for root, folders, files in os.walk(DATA_PATH + '/' + self.name + '/images_{}/'.format(subset)):
             if len(files) == 0:
                 continue
 

@@ -3,6 +3,7 @@ from typing import List, Iterable, Callable, Tuple
 import numpy as np
 import torch
 
+import config
 from few_shot.metrics import categorical_accuracy
 from few_shot.callbacks import Callback
 
@@ -46,8 +47,39 @@ class NShotTaskSampler(Sampler):
         self.n = n
         self.q = q
         self.fixed_tasks = fixed_tasks
+        self.cached_fixed_tasks = dict()
 
         self.i_task = 0
+
+    def fix_test_len(self) -> int:  # certain dic have k sample
+        if self.cached_fixed_tasks is None:
+            return 0
+        return len(self.cached_fixed_tasks)
+
+    def apply_fix_task(self):  # use top k difficult
+        if len(self.cached_fixed_tasks) is 0:
+            return
+        temp = []
+        self.fixed_tasks = []
+        for key, value in self.cached_fixed_tasks.items():
+            temp.append([value, key])
+        temp.sort(key=lambda x: x[0], reverse=True)
+        for i in range(self.k):
+            self.fixed_tasks.append(temp[i][1])
+        return self.fixed_tasks
+
+    def clear_fix_task(self):
+        self.fixed_tasks = None
+        self.cached_fixed_tasks = None
+
+    def add_fix_task(self, sample_id: int):
+        if self.cached_fixed_tasks is None:
+            self.cached_fixed_tasks = dict()
+
+        if sample_id in self.cached_fixed_tasks:
+            self.cached_fixed_tasks[sample_id] += 1
+        else:
+            self.cached_fixed_tasks[sample_id] = 1
 
     def __len__(self):
         return self.episodes_per_epoch
@@ -62,8 +94,7 @@ class NShotTaskSampler(Sampler):
                     episode_classes = np.random.choice(self.dataset.df['class_id'].unique(), size=self.k, replace=False)
                 else:
                     # Loop through classes in fixed_tasks
-                    episode_classes = self.fixed_tasks[self.i_task % len(self.fixed_tasks)]
-                    self.i_task += 1
+                    episode_classes = self.fixed_tasks
 
                 df = self.dataset.df[self.dataset.df['class_id'].isin(episode_classes)]
 
@@ -111,7 +142,7 @@ class EvaluateFewShot(Callback):
                  **kwargs):
         super(EvaluateFewShot, self).__init__()
         self.eval_fn = eval_fn
-        self.num_tasks = num_tasks
+        # self.num_tasks = num_tasks
         self.n_shot = n_shot
         self.k_way = k_way
         self.q_queries = q_queries
@@ -131,7 +162,6 @@ class EvaluateFewShot(Callback):
         totals = {'loss': 0, self.metric_name: 0}
         for batch_index, batch in enumerate(self.taskloader):
             x, y = self.prepare_batch(batch)
-
             loss, y_pred = self.eval_fn(
                 self.model,
                 self.optimiser,
@@ -171,9 +201,9 @@ def prepare_nshot_task(n: int, k: int, q: int) -> Callable:
         TODO: Move to arbitrary device
         """
         x, y = batch
-        x = x.double().cuda()
+        x = x.double().to(config.DEVICE)
         # Create dummy 0-(num_classes - 1) label
-        y = create_nshot_task_label(k, q).cuda()
+        y = create_nshot_task_label(k, q).to(config.DEVICE)
         return x, y
 
     return prepare_nshot_task_

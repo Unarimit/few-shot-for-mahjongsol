@@ -91,6 +91,45 @@ def get_few_shot_encoder(num_input_channels=1) -> nn.Module:
     )
 
 
+class FewDecoderPro(nn.Module):
+    def __init__(self, num_input_channels):
+        super().__init__()
+        self.conv1 = conv_block(num_input_channels, 64)
+        self.conv2 = ConvBlockPro(64, 64)
+        self.conv3 = ConvBlockPro(64, 64)
+        self.conv4 = ConvBlockPro(64, 64)
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.conv2(x)
+        x = self.conv3(x)
+        x = self.conv4(x)
+
+        x = x.view(x.size(0), -1)
+        return x
+
+
+class ConvBlockPro(nn.Module):
+    def __init__(self, in_channels, out_channels):
+        super().__init__()
+        self.conv1 = self._a_conv(in_channels, in_channels)
+        self.conv2 = self._a_conv(in_channels, out_channels)
+        self.max_polling = nn.MaxPool2d(kernel_size=2, stride=2)
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.conv2(x)
+        x = self.max_polling(x)
+        return x
+
+    def _a_conv(self, in_channels, out_channels):
+        return nn.Sequential(
+            nn.Conv2d(in_channels, out_channels, 3, padding=1),
+            nn.BatchNorm2d(out_channels),
+            nn.ReLU()
+        )
+
+
 class FewShotClassifier(nn.Module):
     def __init__(self, num_input_channels: int, k_way: int, final_layer_size: int = 64):
         """Creates a few shot classifier as used in MAML.
